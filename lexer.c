@@ -24,10 +24,15 @@ Token_t* tokenize(char* input) { // todo add comments eg //
         }
 
         else if (isspace(input[index]));
+
+		else if (input[index] == ';')
+		{
+			for(; input[index] != '\n' && input[index]; index++);
+		}
         
         else if(input[index] == '0')
         {
-            HANDLE_THIS_SHIT:
+            
             if (input[index+1] == 'x')
             {
                 index+=2;
@@ -87,6 +92,7 @@ Token_t* tokenize(char* input) { // todo add comments eg //
             result[token_pos].type = TOKEN_IDENTIFIER;
             result[token_pos].index = index;
             result[token_pos++].value = matched;
+            
             
             index = index2-1;
             continue;
