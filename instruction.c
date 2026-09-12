@@ -1,5 +1,5 @@
 #include "instruction.h"
-
+#include "utils.h"
 
 /*
 int parseReg(const char* s) {
@@ -9,7 +9,6 @@ int parseReg(const char* s) {
 	}
 
 	if (strlen(s) != 2 || s[0] != 'R' && s[0] != 'r') {
-		//incorrect format
 		return -2;
 	}
 
@@ -65,7 +64,7 @@ instruction_t *parse(Token_t *tokens)
 	size_t token_len=0;
 	for(; tokens[token_len].type!=TOKEN_EOF; token_len++);
 	
-	instruction_t *instructions = calloc(1,sizeof(instruction_t) * (token_len + 5));
+	instruction_t *instructions = calloc(1,sizeof(instruction_t) * (token_len * 8));
 	
 	for (; pc < token_len; pc++)
 	{
@@ -137,7 +136,12 @@ instruction_t *parse(Token_t *tokens)
 			}
 		}
 		
-		instruction_length = i-1;
+		if(tokens[i+pc].type == TOKEN_EOF)
+		{
+			instruction_length = i;
+		}
+		else 
+			instruction_length = i-1;
 		pc += i;
 		if (is_label)
 		{
@@ -163,14 +167,14 @@ instruction_t *parse(Token_t *tokens)
 			if (parse_reg(src1) == -5) // not a register so its a label
 			{
 				instructions[instruction_pos].instruction_type = INS_BR;
-				instructions[instruction_pos].src1 = dst.number; // let memory leak we have gigabytes of memory anyway
+				instructions[instruction_pos].dst = dst.number; // let memory leak we have gigabytes of memory anyway
 				instructions[instruction_pos++].label = src1.value;
 			}
 			
 			else if (src1.type == TOKEN_NUMBER)
 			{
 				instructions[instruction_pos].instruction_type = INS_BR;
-				instructions[instruction_pos].src1 = dst.number; // let memory leak we have gigabytes of memory anyway
+				instructions[instruction_pos].dst = dst.number; // let memory leak we have gigabytes of memory anyway
 				instructions[instruction_pos++].imm = src1.number;
 			}
 
@@ -208,23 +212,139 @@ instruction_t *parse(Token_t *tokens)
 				printf("no more insulting 💔");
 				exit(35);
 			}
+			continue;
 		}
+
+		else if (!strcmp(instruction.value, "WORD")) // :(
+		{
+			if (dst.type == TOKEN_NUMBER)
+			{
+				instructions[instruction_pos].instruction_type = WORD;
+				instructions[instruction_pos++].imm = dst.number;
+			}
+			else
+			{
+				printf("no more insulting 💔");
+				exit(35);
+			}
+			continue;
+		}
+
+		else if (!strcmp(instruction.value, "trap")) // :(
+		{
+			if (dst.type == TOKEN_NUMBER)
+			{
+				instructions[instruction_pos].instruction_type = INS_TRAP;
+				instructions[instruction_pos++].imm = dst.number;
+			}
+			else
+			{
+				printf("no more insulting 💔");
+				exit(35);
+			}
+			continue;
+		}
+
+		else if (!strcmp(instruction.value, "ORG")) // :(
+	
+		{
 		
+			if (dst.type == TOKEN_NUMBER)
+			{
+				instructions[instruction_pos].instruction_type = ORG;
+				instructions[instruction_pos++].imm = dst.number;
+			}
+			else
+			{
+				printf("no more insulting 💔");
+				exit(35);
+			}
+			continue;
+		}
+
+		else if (!strcmp(instruction.value, "ret"))
+		{
+			if (instruction_length != 0)
+			{
+				printf("dude just rm -rf yourself");
+				exit(38931);
+			}
+			instructions[instruction_pos++].instruction_type = INS_RET;
+			continue;
+		}
+
+		else if (!strcmp(instruction.value, "nop"))
+		{
+			if (instruction_length != 0)
+			{
+				printf("dude just rm -rf yourself");
+				exit(38931);
+			}
+			instructions[instruction_pos++].instruction_type = INS_NOP;
+			continue;
+		}
+		else if(!strcmp(instruction.value, "li"))
+		{
+			if (instruction_length==2) // either add r1 r2 or add r1 imm
+			{
+				if (src1.type == TOKEN_NUMBER)
+				{
+					instructions[instruction_pos].instruction_type = INS_LD;
+					instructions[instruction_pos].imm=1;
+					instructions[instruction_pos++].dst=parse_reg(dst);
+
+					instructions[instruction_pos].instruction_type = INS_BR;
+					instructions[instruction_pos].imm=1;
+					instructions[instruction_pos++].dst=0b111;
+
+					instructions[instruction_pos].instruction_type = WORD;
+					instructions[instruction_pos++].imm=src1.number;
+				}
+
+				else if (src1.type == TOKEN_IDENTIFIER)
+				{
+					instructions[instruction_pos].instruction_type = INS_LD;
+					instructions[instruction_pos].imm=1;
+					instructions[instruction_pos++].dst=parse_reg(dst);
+
+					instructions[instruction_pos].instruction_type = INS_BR;
+					instructions[instruction_pos].imm=1;
+					instructions[instruction_pos++].dst=0b111;
+
+					instructions[instruction_pos].instruction_type = WORD;
+					instructions[instruction_pos++].label = src1.value;
+				}
+
+				else
+				{
+					printf("youre not even worth insulting1");
+					exit(0x361);
+				}			
+			}
+			else
+			{
+				printf("youre not even worth insulting2");
+				exit(0x361);
+			}
+			continue;
+		}
 		if(parse_reg(dst)<0)
 		{
-			printf(" %s ", dst.value);
+			printf(" a %s a ", instruction.value);
 			printf("couldnt parse dst register");
 			exit(0xdeadbeef);
 		}
 
 		if(src1.type==TOKEN_IDENTIFIER && parse_reg(src1)<0)
 		{
+			printf(" a %s a ", instruction.value);
 			printf("couldnt parse src1 register");
 			exit(0xdeadbeef);
 		}
 		
 		if(src2.type==TOKEN_IDENTIFIER && parse_reg(src2)<0)
 		{
+			printf(" a %s a ", instruction.value);
 			printf("couldnt parse src2 register");
 			exit(0xdeadbeef);
 		}
@@ -236,10 +356,74 @@ instruction_t *parse(Token_t *tokens)
 			if (instruction_length!=0)
 			{
 				printf("nop instruction does not expect any args");
-				exit(0xdeadbeef);
+				exit(0xdeadbeef);	
 			}
 			instructions[instruction_pos++].instruction_type = INS_NOP;
 		}
+
+		else if(!strcmp(instruction.value, "lp"))
+		{
+			if (instruction_length==2) // either add r1 r2 or add r1 imm
+			{
+				if (src1.type == TOKEN_NUMBER)
+				{
+					instructions[instruction_pos].instruction_type = INS_LDI;
+					instructions[instruction_pos].imm=1;
+					instructions[instruction_pos++].dst=parse_reg(dst);
+
+					instructions[instruction_pos].instruction_type = INS_BR;
+					instructions[instruction_pos].imm=1;
+					instructions[instruction_pos++].dst=0b111;
+
+					instructions[instruction_pos].instruction_type = WORD;
+					instructions[instruction_pos++].imm=src1.number;
+				}
+				
+				else
+				{
+					printf("youre not even worth insulting");
+					exit(0x361);
+				}			
+			}
+			else
+			{
+				printf("youre not even worth insulting");
+				exit(0x361);
+			}
+		}
+
+		else if(!strcmp(instruction.value, "wrt"))
+		{
+			if (instruction_length==2) // either add r1 r2 or add r1 imm
+			{
+				if (src1.type == TOKEN_NUMBER)
+				{
+					instructions[instruction_pos].instruction_type = INS_STI;
+					instructions[instruction_pos].imm=1;
+					instructions[instruction_pos++].dst=parse_reg(dst);
+
+					instructions[instruction_pos].instruction_type = INS_BR;
+					instructions[instruction_pos].imm=1;
+					instructions[instruction_pos++].dst=0b111;
+
+					instructions[instruction_pos].instruction_type = WORD;
+					instructions[instruction_pos++].imm=src1.number;
+				}
+				
+				else
+				{
+					printf("youre not even worth insulting");
+					exit(0x361);
+				}			
+			}
+			else
+			{
+				printf("youre not even worth insulting");
+				exit(0x361);
+			}
+		}
+
+
 		
 		else if (!strcmp(instruction.value, "add"))
 		{
@@ -348,16 +532,25 @@ instruction_t *parse(Token_t *tokens)
 		{
 			if (instruction_length==2)
 			{
-				if (src1.type == TOKEN_NUMBER) // AHHHHHH
-				{
-					instructions[instruction_pos].instruction_type = INS_NOT_RI4;
-					instructions[instruction_pos].imm=parse_reg(src1);
-					instructions[instruction_pos++].dst=parse_reg(dst);	
-				}
-
-				else if (src1.type == TOKEN_IDENTIFIER)
+				printf("not %d, %d\n", parse_reg(dst) , parse_reg(src1));
+				if (src1.type == TOKEN_IDENTIFIER) // AHHHHHH
 				{
 					instructions[instruction_pos].instruction_type = INS_NOT_RR;
+					instructions[instruction_pos].src1=parse_reg(src1);
+					instructions[instruction_pos++].dst=parse_reg(dst);	
+				}
+				else
+				{
+					printf("thy end is now");
+					exit(0xe03);
+				}
+			}
+			else if (instruction_length == 1)
+			{
+				printf("not %d\n", parse_reg(dst));
+				if (dst.type == TOKEN_IDENTIFIER)
+				{
+					instructions[instruction_pos].instruction_type = INS_NOT_R;
 					instructions[instruction_pos].src1 = parse_reg(src1);
 					instructions[instruction_pos++].dst = parse_reg(dst);									
 				}
@@ -522,7 +715,7 @@ instruction_t *parse(Token_t *tokens)
 		
 		else if (!strcmp(instruction.value, "lea"))
 		{
-			if (instruction_length != 3)
+			if (instruction_length != 2)
 			{
 				printf("are you dumbass");
 				exit(0x531);
@@ -536,18 +729,10 @@ instruction_t *parse(Token_t *tokens)
 			
 			instructions[instruction_pos].instruction_type = INS_LEA;
 			instructions[instruction_pos].imm = src1.number;
-			instructions[instruction_pos].dst = parse_reg(dst);
+			instructions[instruction_pos++].dst = parse_reg(dst);
 		}
 		
-		else if (!strcmp(instruction.value, "ret"))
-		{
-			if (instruction_length != 0)
-			{
-				printf("dude just rm -rf yourself");
-				exit(38931);
-			}
-			instructions[instruction_pos++].instruction_type = INS_RET;
-		}
+
 		// will be implemented later
 		
 		else if (!strcmp(instruction.value, "sub"))
@@ -558,15 +743,32 @@ instruction_t *parse(Token_t *tokens)
 			{
 				if (dst.type == TOKEN_IDENTIFIER && src1.type == TOKEN_IDENTIFIER && src2.type == TOKEN_IDENTIFIER)
 				{
-					instructions[instruction_pos].instruction_type = INS_SUB;
+					
 					if ((parse_reg(dst) < 0|| parse_reg(src1) < 0|| parse_reg(src2) < 0))
 					{
 						printf("THY END IS NOW");
 						exit(0x24);
 					}
+					instructions[instruction_pos].instruction_type = INS_NOT_R;
+					instructions[instruction_pos++].dst = parse_reg(src1);
+					
+					instructions[instruction_pos].instruction_type = INS_ADD_RI7;
+					instructions[instruction_pos].dst = parse_reg(src1);
+					instructions[instruction_pos++].imm=1;
+					
+					instructions[instruction_pos].instruction_type = INS_ADD_RR;
+					instructions[instruction_pos].dst = parse_reg(dst);
 					instructions[instruction_pos].src1 = parse_reg(src1);
-					instructions[instruction_pos].src2 = parse_reg(src2);
-					instructions[instruction_pos++].dst = parse_reg(dst);
+					instructions[instruction_pos++].src2 = parse_reg(src2);
+
+					instructions[instruction_pos].instruction_type = INS_ADD_RI7;
+					instructions[instruction_pos].dst = parse_reg(src1);
+					instructions[instruction_pos++].imm=-1;
+							
+					instructions[instruction_pos].instruction_type = INS_NOT_R;
+					instructions[instruction_pos++].dst = parse_reg(src1);
+
+					
 					continue;													
 										
 				}
@@ -775,9 +977,11 @@ instruction_t *parse(Token_t *tokens)
 		}
 		else
 		{
-			printf("i dont even know what did you just tpyed");
+			printf("i dont even know what did you just tpyed so here %s ", instruction.value);
+			exit(2541);
 		}
 	}
 	instructions[instruction_pos++].instruction_type = INS_EOP;
 	return instructions;
 }
+

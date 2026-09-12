@@ -31,7 +31,7 @@ typedef enum INSTRUCTION_E
 
     /* NOT */
     INS_NOT_RR,      // NOT Rd, Rs
-    INS_NOT_RI4,     // NOT Rd, imm4
+    INS_NOT_R,       // NOT Rd
 
     /* memory */
     INS_LD,          // LD Rd, PC + imm9
@@ -60,6 +60,10 @@ typedef enum INSTRUCTION_E
 
     /* traps */
     INS_TRAP,
+
+	/* raw byte writing */
+	WORD, // RAW 0xff
+	ORG,  // ORG 0xffff = pc = 0xffff
 
     /* arithmetic expansion */
     INS_SUB,
