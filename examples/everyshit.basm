@@ -22,7 +22,7 @@ ORG 256
 WORD 0xffff ; set current 
 
 wrt r1 0xffff ; write r1 to adress 0xffff
-STR r2 r3 ; write r2 to adress r3
+str r2 r3 ; write r2 to adress r3
 
 ; i am just lazy to explain everything its basicly mostly same with bob16 doc with some differences 
 
