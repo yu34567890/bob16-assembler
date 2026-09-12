@@ -1,0 +1,31 @@
+
+
+; comments
+; instruction dst src1 src2
+
+
+add r1 r2 r3 ; add instruction
+add r2 3
+add r1 r2 3
+
+jmpr reg
+ret 
+
+jsr label
+jsr 0xff
+
+li r1 label ; loads the adress of an label
+li r1 255 ; loads an imm value to r1
+
+lp r1 0xffff ; read memory adress 0xffff to r1 
+
+ORG 256 
+WORD 0xffff ; set current 
+
+wrt r1 0xffff ; write r1 to adress 0xffff
+STR r2 r3 ; write r2 to adress r3
+
+; i am just lazy to explain everything its basicly mostly same with bob16 doc with some differences 
+
+
+
