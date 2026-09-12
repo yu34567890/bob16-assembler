@@ -8,7 +8,6 @@ add r1 r2 r3 ; add instruction
 add r2 3
 add r1 r2 3
 
-jmpr reg
 ret 
 
 jsr label
