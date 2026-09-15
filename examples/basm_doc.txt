@@ -1,0 +1,186 @@
+-- strict rules --
+
+every program must start with 
+and r0 r0 r0
+otherwise li lp wrt will not work 
+
+-- other instructions are nearly identical to the bob 16 docs --
+
+
+
+-- built in instructions --
+(these instruction exist in the cpu)
+(and these instructions are different from bob16 docs)
+
+BR: if condition codes match any of the nzp flags, pc += imm[9]
+	ex. br 0b101 50
+		(jumps to incremented pc + 50 if condition codes n or p are 1)
+	flag codes
+	0b001 p
+	0b010 z
+	0b100 n 
+	nzp does not works in br only binary values 
+
+LEA: dst = pc + imm
+	ex. LEA R7 10 
+		(sets register 7 to pc + 10)
+	
+
+JMPR: pc = r[src]
+	ex. jmpr r0
+	(only register jumping)
+
+JSR: r7 = pc and pc = register / label / 11 bit imm
+	ex. 
+	LOOP:
+	jsr LOOP:
+
+	can be used for function calls too
+
+
+-- psudeo instructions --
+(these instructions does not exist on the cpu but assembler transpiles them to valid bob16 instructions)
+
+LI: loads an imm to dst register
+	ex.
+	li r1 0xffff
+	r1 now contains 0xffff
+	labels can be used too 
+	li r1 SOME_FUNC
+	r1 now contains adress of that label 
+
+LP: load an memory adress to dst register
+	ex.
+	lp r1 0xffff
+	r1 now contains value of memory adress 0xffff (does not support registers )
+	labels can be used here too
+
+WRT: write dst to memory adress at r1
+	ex. 
+	write r1 r2
+	memory[r2] = r1
+
+-- stdlib instructions --
+(these instructions are defined in the stdlib)
+
+%include "stdlib.basm"
+
+(important note stdlib uses r0 as stack pointer main.basm or any other program shall not use r0 ever same as r7 as r7 is return to caller)
+(stack starts at 0x8000 tho can be changed by changing the value of r0 you should put li r0 stack_adress so stdlib will use that adress )
+
+push r1 ; pushes r1 to memory adress at r0 and increments r0
+
+pop r1 : decrements r0 and reads it to r1 
+
+cmp: compares given registers and sets the flags
+	ex. 
+	cmp r1 r2 
+	if r1 > r2
+		p = 1 
+	if r1 < r2
+		n = 1 
+	if r1 = r2
+		z = 1 
+	
+	-- WARN --
+	you should use cmp_reverse after using cmp otherwise 2 registers will get corrupted
+	ex 
+	cmp r1 r2
+	br 0b001 label ; if r1 > r2 jmp to label 
+
+
+	label:
+	cmp_reverse r1 r2
+
+
+	and you should use br right after using the cmp instruction otherwise the flags will be reset by an another instruction 
+
+	cmp r1 r2 
+	add r3 r1 r2 
+	br 0b001 label
+	; this is wrong as this uses the broken r1 r2 values and br will not jmp to the label 
+
+
+
+
+-- macros --
+
+%include "filename"
+it includes the filename its just reads the file nad pastes its source to the line 
+
+%define SOMETHING 0xffff
+
+now when ever SOMETHING is used preprocessor will set that part to 0xffff 
+
+%ifndef SOMETHING 
+%endif
+
+if SOMETHING is not defined it will preprocess the code inside otherwise it will skip it 
+
+%ifdef SOMETHING 
+%endif 	
+
+if something is defined it will preprocess the code in it 
+
+
+
+%func testinstruction arg0
+	put arg0 
+%endfunc 
+
+this is a func you can call inside the assembler and it will put the code in itself 
+
+testinstruction helloworld 
+will turn into just 
+helloworld 
+
+commands in preprocessor 
+
+put 
+puts that line when func is used 
+
+%func test 
+	%repeat
+		put arg 
+	%endrepeat
+%endfunc 
+
+this will append the args given to line func used eg dont specify args for infinite number of args 
+test add r1 r2 r3 
+will turn into 
+add r1 r2 r3 
+
+
+func args 
+
+
+%func sub arg0, arg1, arg2
+	put not arg1
+	put add arg1 1 
+	put add arg0 arg1 arg2 
+%endfunc 
+this is a simple sub instruction that uses 3 args 
+
+example 
+sub r1 r2 r3 
+
+will become 
+
+not r2 
+add r2 1 
+add r1 r2 r3 
+
+args cannot have any other name than arg[argnumber]
+
+%func test source 
+%endfunc 
+
+this is not allowed 
+
+-- helper instructions -- 
+(these instructions must be writen with upercase)
+ORG 0x8000 
+this sets current pc to 0x8000 any instruction from now on will be writen to adress 0x8000
+
+WORD 0xffff 
+sets current adress value to 0xffff 

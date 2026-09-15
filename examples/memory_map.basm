@@ -1,0 +1,11 @@
+%ifndef MEMORY_MAP
+
+
+%define MEMORY_MAP 0
+%define GPU_START 0xf001
+%define GPU_MODE 0xf000
+
+%define KEYBOARD_ADDR Ox8000
+%define KEYBOARD_POLL 0x8001
+
+%endif

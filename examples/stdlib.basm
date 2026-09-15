@@ -1,0 +1,41 @@
+%define STACK_POINTER r0
+%define STACK_ADDR 0x8000
+
+%func push register
+	put str arg0 r0 0
+	add r0 1
+%endfunc
+
+%func pop dst    
+	add r0 -1
+	put ldr arg0 r0 0
+%endfunc
+
+
+%func sub arg0, arg1, arg2
+	put not arg2
+	put add arg2, 1
+	put add arg0, arg1, arg2
+	put add arg2, -1
+	put not arg2
+%endfunc
+
+%func cmp arg0, arg1
+	put not arg1
+	put add arg1,1
+	put add arg1 ,arg0, arg1
+%endfunc
+
+%func cmp_reverse arg0, arg1
+	put not arg1
+	put add arg1,1
+	put add arg1 ,arg0, arg1   
+%endfunc
+
+
+%func .datafill 
+	%repeat
+		put WORD arg
+	%endrepeat
+%endfunc
+
