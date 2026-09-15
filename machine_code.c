@@ -11,7 +11,7 @@ typedef struct fake_hashmap
 {
 	char *label;	
 	uint16_t location;
-} fake_hashmap_t;
+} HashmapLarp;
 
 enum {
 	NOP,
@@ -39,7 +39,7 @@ uint16_t *code_gen(instruction_t *instructions)
 	uint16_t *memory = calloc(1,65536*sizeof(uint16_t));
 	uint16_t pc = 0;
 	uint16_t label_track=0;
-	fake_hashmap_t label_map[65536]; // if you have more labels than 65536 goto an hospital you damn insane man 
+	HashmapLarp label_map[65536]; // if you have more labels than 65536 goto an hospital you damn insane man 
 
 	for (size_t i=0; instructions[i].instruction_type != INS_EOP; i++) 
 	{
@@ -56,6 +56,7 @@ uint16_t *code_gen(instruction_t *instructions)
 		
 		else if (instructions[i].instruction_type>=INS_SUB && instructions[i].instruction_type < LABEL) // after INS_SUB and including sub they use 2 opcodes
 		{
+			printf("shit ass instruction found reported this is a bug");
 			pc+=2;
 		}
 		else
@@ -87,19 +88,19 @@ uint16_t *code_gen(instruction_t *instructions)
 				case WORD:
 					if (instructions[i].label)
 					{
-					    if (instructions[i].label != NULL)
-					    {
+						if (instructions[i].label != NULL)
+						{
 						for (int j = 0; j < label_track; j++)
 						{
-						    if (strcmp(label_map[j].label, instructions[i].label) == 0)
-						    {
+							if (strcmp(label_map[j].label, instructions[i].label) == 0)
+							{
 							memory[pc] = label_map[j].location;
 							
 							break;
-						    }
+							}
 						}
-					    }	
-					    
+						}	
+						
 					}
 					else
 					{
@@ -206,42 +207,42 @@ uint16_t *code_gen(instruction_t *instructions)
 					break;
 
 				case INS_STR:
-					memory[pc] = (STR<<12)+
-					(instructions[i].dst<<9)+
-					(instructions[i].src1<<6)+
+					memory[pc] = (STR<<12)|
+					(instructions[i].dst<<9)|
+					(instructions[i].src1<<6)|
 					(instructions[i].imm&0x3f);
 					break;
 
 
 				case INS_BR: 
 				{
-				    int jmp_adress = 0;
-				    if (instructions[i].label != NULL)
-				    {
-				        for (int j = 0; j < label_track; j++)
-				        {
-				            if (strcmp(label_map[j].label, instructions[i].label) == 0)
-				            {
-				                jmp_adress = (int)label_map[j].location - (int)pc - 1;
+					int jmp_adress = 0;
+					if (instructions[i].label != NULL)
+					{
+						for (int j = 0; j < label_track; j++)
+						{
+							if (strcmp(label_map[j].label, instructions[i].label) == 0)
+							{
+								jmp_adress = (int)label_map[j].location - (int)pc - 1;
 				
-				                if (jmp_adress > 255 || jmp_adress < -256)
-				                {
-				                    printf("label is too far to the br instruction\n");
-				                    exit(0x38);
-				                }
-				                break; // also worth adding — no need to keep scanning once matched
-				            }
-				        }
-				    }
-				    else
-				    {
-				        jmp_adress = instructions[i].imm;
-				    }
-				    jmp_adress &= 0b111111111;
-				    memory[pc] = (BR << 12) +
-				                 ((instructions[i].dst & 0b111) << 9) +
-				                 jmp_adress;
-				    break;
+								if (jmp_adress > 255 || jmp_adress < -256)
+								{
+									printf("label is too far to the br instruction\n");
+									exit(0x38);
+								}
+								break; // also worth adding — no need to keep scanning once matched
+							}
+						}
+					}
+					else
+					{
+						jmp_adress = instructions[i].imm;
+					}
+					jmp_adress &= 0b111111111;
+					memory[pc] = (BR << 12) +
+								 ((instructions[i].dst & 0b111) << 9) +
+								 jmp_adress;
+					break;
 				}
 
 				case INS_JMP_REG:
@@ -259,7 +260,7 @@ uint16_t *code_gen(instruction_t *instructions)
 							if(strcmp(label_map[label_i].label, instructions[i].label)==0)
 							{
 								jmp_adress2 =
-								    	(int)label_map[label_i].location - (int)pc - 1;
+										(int)label_map[label_i].location - (int)pc - 1;
 								if (jmp_adress2 > 1023 || jmp_adress2 < -1024)
 								{
 									printf("label is too far to the jsr instruction");

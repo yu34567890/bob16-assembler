@@ -6,7 +6,7 @@ SRCS = $(wildcard *.c)
 all: $(TARGET)
 
 $(TARGET): $(SRCS)
-	$(CC) $(CFLAGS) $(SRCS) -o $(TARGET)
+	$(CC) $(CFLAGS) ./shamefull_ai_slop/minipp.c $(SRCS) -o $(TARGET)
 
 clean:
 	rm -f $(TARGET)
