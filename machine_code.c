@@ -134,8 +134,8 @@ uint16_t *code_gen(instruction_t *instructions)
 					break;
 
 				case INS_ADD_RI7:
-					memory[pc] = (ADD<<12) + (3<<7) + (instructions[i].dst<<9) + 
-					(instructions[i].imm & 0x1ff);					
+					memory[pc] = (ADD<<12) | (3<<7) | (instructions[i].dst<<9) | 
+					(instructions[i].imm & 0x7f);					
 					break;
 
 
@@ -158,7 +158,7 @@ uint16_t *code_gen(instruction_t *instructions)
 
 				case INS_AND_RI7:
 					memory[pc] = (AND<<12) + (3<<7) + (instructions[i].dst<<9) + 
-					(instructions[i].imm & 0x1ff);					
+					(instructions[i].imm & 0x7f);					
 					break;
 
 
