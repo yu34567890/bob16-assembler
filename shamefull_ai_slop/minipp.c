@@ -143,6 +143,46 @@ static char *replace_whole_word(const char *text, const char *name, const char *
     return result;
 }
 
+/* Replace every occurrence of `needle` in `text` with `replacement`,
+ * as a plain substring match (no word-boundary checks at all - this is
+ * intentionally different from replace_whole_word, for cases like the
+ * COUNTER token that must match even mid-identifier). Returns a newly
+ * allocated string; caller frees. */
+static char *replace_substring(const char *text, const char *needle, const char *replacement) {
+    size_t needle_len = strlen(needle);
+    if (needle_len == 0) return xstrdup(text);
+
+    sb_t out;
+    sb_init(&out);
+
+    const char *p = text;
+    while (1) {
+        const char *hit = strstr(p, needle);
+        if (!hit) {
+            sb_append(&out, p);
+            break;
+        }
+        size_t seglen = (size_t)(hit - p);
+        char *seg = (char *)malloc(seglen + 1);
+        memcpy(seg, p, seglen);
+        seg[seglen] = '\0';
+        sb_append(&out, seg);
+        free(seg);
+        sb_append(&out, replacement);
+        p = hit + needle_len;
+    }
+
+    char *result = xstrdup(out.data);
+    sb_free(&out);
+    return result;
+}
+
+static char *itoa_new(int n) {
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%d", n);
+    return xstrdup(buf);
+}
+
 /* ------------------------------------------------------------------- *
  *  Line list (splitting a whole source buffer into lines)
  * ------------------------------------------------------------------- */
@@ -325,6 +365,11 @@ typedef struct {
     int variadic;          /* 1 if declared with no argument names */
     str_list arg_names;    /* declared argument names (informational) */
     line_list body;        /* raw, comment-stripped body lines */
+    int usage_count;       /* incremented every time this func is invoked;
+                             * substituted (as a plain substring, anywhere
+                             * in a line, even mid-identifier) for the
+                             * literal token "COUNTER" in put/plain body
+                             * lines of this func. */
 } func_t;
 
 typedef struct {
@@ -353,6 +398,7 @@ static func_t *ft_add(func_table *t, const char *name) {
     func_t *f = &t->items[t->count++];
     f->name = xstrdup(name);
     f->variadic = 0;
+    f->usage_count = 0;
     sl_init(&f->arg_names);
     /* f->body is deliberately left un-initialized here: the caller
      * (process_lines, %func handling) always assigns a freshly-built
@@ -377,6 +423,7 @@ static void ft_free(func_table *t) {
 
 #define MAX_COND_DEPTH 64
 #define MAX_INCLUDE_DEPTH 64
+#define MAX_CALL_DEPTH 256
 
 typedef struct {
     int parent_active; /* was the enclosing scope active? */
@@ -408,6 +455,7 @@ typedef struct {
     cond_stack conds;
     char *include_stack[MAX_INCLUDE_DEPTH];
     int include_depth;
+    int call_depth;    /* nested %func-call recursion depth (via %fncall) */
     int error;
     char error_msg[512];
 } pp_state;
@@ -424,6 +472,62 @@ static void pp_error(pp_state *st, const char *fmt, ...) {
 /* forward decl */
 static void process_lines(pp_state *st, line_list *ll, const char *cur_dir);
 
+/* Checks whether trimmed line `t` is the directive `%keyword` (with or
+ * without a space after the '%', e.g. both "%fncall" and "% fncall"
+ * match keyword "fncall"). On match, *rest points to the trimmed text
+ * following the keyword and 1 is returned; otherwise returns 0. */
+static int match_directive(const char *t, const char *keyword, const char **rest) {
+    if (t[0] != '%') return 0;
+    const char *p = t + 1;
+    while (*p == ' ' || *p == '\t') p++;
+    size_t klen = strlen(keyword);
+    if (strncmp(p, keyword, klen) != 0) return 0;
+    p += klen;
+    if (*p != '\0' && !isspace((unsigned char)*p)) return 0; /* whole word only */
+    while (*p && isspace((unsigned char)*p)) p++;
+    *rest = p;
+    return 1;
+}
+
+/* Substitutes named args (as declared in `% func NAME a, b, ...`),
+ * positional arg0, arg1, ..., and the bare `arg` (current %repeat
+ * iteration value, if any) in `text`. Does NOT apply %defines - callers
+ * do that separately where appropriate. Returns a newly allocated
+ * string. `arg_names` may be an empty list (variadic func: named
+ * substitution is simply skipped). */
+static char *substitute_call_context(str_list *arg_names, str_list *call_args,
+                                      const char *current_val, const char *text) {
+    char *cur = xstrdup(text);
+
+    /* Named args first, e.g. declared as "% func mov, dst, src". */
+    for (int i = 0; i < arg_names->count && i < call_args->count; i++) {
+        char *next = replace_whole_word(cur, arg_names->items[i], call_args->items[i]);
+        free(cur);
+        cur = next;
+    }
+    /* Then positional arg0, arg1, ... (always available, regardless of
+     * whether the func declared names). */
+    for (int i = 0; i < call_args->count; i++) {
+        char name[32];
+        snprintf(name, sizeof(name), "arg%d", i);
+        char *next = replace_whole_word(cur, name, call_args->items[i]);
+        free(cur);
+        cur = next;
+    }
+    if (current_val) {
+        char *next = replace_whole_word(cur, "arg", current_val);
+        free(cur);
+        cur = next;
+    }
+    return cur;
+}
+
+/* forward decl (defined later, near the other directive-parsing helpers) */
+static int take_first_word(const char *s, char *word, size_t word_sz, const char **rest);
+
+/* forward decl (mutually recursive with emit_func_body_line via %fncall) */
+static void expand_func_call(pp_state *st, func_t *f, str_list *call_args);
+
 /* ------------------------------------------------------------------- *
  *  Emitting a single body line inside a func expansion.
  *  call_args: the arguments given at the call site.
@@ -433,45 +537,61 @@ static void process_lines(pp_state *st, line_list *ll, const char *cur_dir);
  * ------------------------------------------------------------------- */
 
 static void emit_func_body_line(pp_state *st, const char *raw_line,
-                                 str_list *call_args, const char *current_val) {
+                                 str_list *arg_names, str_list *call_args,
+                                 const char *current_val, const char *counter_str) {
     char *line = xstrdup(raw_line);
     char *t = trim(line);
+    const char *fc_rest;
 
     if (strncmp(t, "put ", 4) == 0 || strcmp(t, "put") == 0) {
         const char *rest = (strlen(t) > 3) ? t + 4 : "";
-        char *text = xstrdup(rest);
 
-        /* Substitute positional arg0, arg1, ... first (longer/specific). */
-        for (int i = 0; i < call_args->count; i++) {
-            char name[32];
-            snprintf(name, sizeof(name), "arg%d", i);
-            char *next = replace_whole_word(text, name, call_args->items[i]);
-            free(text);
-            text = next;
-        }
-        /* Then substitute bare `arg` with the current repeat value, if any. */
-        if (current_val) {
-            char *next = replace_whole_word(text, "arg", current_val);
-            free(text);
-            text = next;
-        }
-        /* Finally apply top-level %defines. */
-        char *final_text = apply_defines(&st->defines, text);
+        char *text = substitute_call_context(arg_names, call_args, current_val, rest);
+        char *with_defines = apply_defines(&st->defines, text);
         free(text);
+        char *final_text = replace_substring(with_defines, "COUNTER", counter_str);
+        free(with_defines);
         sb_append_line(&st->output, final_text);
         free(final_text);
 
     } else if (strncmp(t, "raw ", 4) == 0 || strcmp(t, "raw") == 0) {
         const char *rest = (strlen(t) > 3) ? t + 4 : "";
+        /* raw is completely verbatim: no defines, no arg/argN, no
+         * COUNTER substitution - that's the whole point of `raw`. */
         sb_append_line(&st->output, rest);
+
+    } else if (match_directive(t, "fncall", &fc_rest)) {
+        /* %fncall targetFunc args...  - explicit nested func call.
+         * The argument text gets arg/argN + %define substitution
+         * (like `put` does) before being split and passed on. */
+        char tname[128];
+        const char *args_text;
+        take_first_word(fc_rest, tname, sizeof(tname), &args_text);
+
+        func_t *target = ft_find(&st->funcs, tname);
+        if (!target) {
+            pp_error(st, "%%fncall: unknown func '%s'", tname);
+        } else {
+            char *sub1 = substitute_call_context(arg_names, call_args, current_val, args_text);
+            char *sub2 = apply_defines(&st->defines, sub1);
+            free(sub1);
+            str_list nested_args;
+            split_args(sub2, &nested_args);
+            free(sub2);
+            expand_func_call(st, target, &nested_args);
+            sl_free(&nested_args);
+        }
 
     } else if (t[0] == '%') {
         pp_error(st, "unsupported directive inside func body: '%s'", t);
     } else if (*t == '\0') {
         /* blank line inside body: ignore */
     } else {
-        /* plain passthrough line: only %defines applied, no arg substitution */
-        char *final_text = apply_defines(&st->defines, t);
+        /* plain passthrough line: %defines and COUNTER applied,
+         * no arg/argN substitution (that's `put`-only). */
+        char *with_defines = apply_defines(&st->defines, t);
+        char *final_text = replace_substring(with_defines, "COUNTER", counter_str);
+        free(with_defines);
         sb_append_line(&st->output, final_text);
         free(final_text);
     }
@@ -486,6 +606,15 @@ static void expand_func_call(pp_state *st, func_t *f, str_list *call_args) {
                   f->name, f->arg_names.count, call_args->count);
         return;
     }
+
+    if (st->call_depth >= MAX_CALL_DEPTH) {
+        pp_error(st, "func call nesting too deep in '%s' (possible infinite recursion via %%fncall)", f->name);
+        return;
+    }
+    st->call_depth++;
+
+    f->usage_count++;
+    char *counter_str = itoa_new(f->usage_count);
 
     for (int i = 0; i < f->body.count && !st->error; i++) {
         char *line = xstrdup(f->body.lines[i]);
@@ -516,7 +645,7 @@ static void expand_func_call(pp_state *st, func_t *f, str_list *call_args) {
             }
             for (int a = 0; a < call_args->count && !st->error; a++) {
                 for (int r = 0; r < rbody.count && !st->error; r++) {
-                    emit_func_body_line(st, rbody.lines[r], call_args, call_args->items[a]);
+                    emit_func_body_line(st, rbody.lines[r], &f->arg_names, call_args, call_args->items[a], counter_str);
                 }
             }
             ll_free(&rbody);
@@ -525,11 +654,14 @@ static void expand_func_call(pp_state *st, func_t *f, str_list *call_args) {
             pp_error(st, "func '%s': stray %%endrepeat", f->name);
 
         } else {
-            emit_func_body_line(st, f->body.lines[i], call_args, NULL);
+            emit_func_body_line(st, f->body.lines[i], &f->arg_names, call_args, NULL, counter_str);
         }
 
         free(line);
     }
+
+    free(counter_str);
+    st->call_depth--;
 }
 
 /* ------------------------------------------------------------------- *
@@ -573,7 +705,7 @@ static char *join_path(const char *dir, const char *file) {
 static char *read_whole_file(const char *path, pp_state *st) {
     FILE *fp = fopen(path, "rb");
     if (!fp) {
-        pp_error(st, "could not open include file '%s'", path);
+        pp_error(st, "could not open file '%s'", path);
         return NULL;
     }
     fseek(fp, 0, SEEK_END);
@@ -750,6 +882,7 @@ static void process_lines(pp_state *st, line_list *ll, const char *cur_dir) {
                 if (!closed) {
                     pp_error(st, "%%func '%s' missing matching %%endfunc", name);
                     ll_free(&body);
+                    sl_free(&names);
                     free(stripped);
                     break;
                 }
@@ -779,6 +912,24 @@ static void process_lines(pp_state *st, line_list *ll, const char *cur_dir) {
 
             } else if (strcmp(keyword, "endfunc") == 0) {
                 pp_error(st, "stray %%endfunc");
+
+            } else if (strcmp(keyword, "fncall") == 0) {
+                if (active) {
+                    char tname[128];
+                    const char *args_text;
+                    take_first_word(rest, tname, sizeof(tname), &args_text);
+                    func_t *target = ft_find(&st->funcs, tname);
+                    if (!target) {
+                        pp_error(st, "%%fncall: unknown func '%s'", tname);
+                    } else {
+                        char *sub = apply_defines(&st->defines, args_text);
+                        str_list nested_args;
+                        split_args(sub, &nested_args);
+                        free(sub);
+                        expand_func_call(st, target, &nested_args);
+                        sl_free(&nested_args);
+                    }
+                }
 
             } else if (strcmp(keyword, "repeat") == 0 || strcmp(keyword, "endrepeat") == 0) {
                 pp_error(st, "%%%s used outside of a %%func body", keyword);
@@ -861,6 +1012,7 @@ minipp_result minipp_process(const char *source, const char *filename) {
     sb_init(&st.output);
     cs_init(&st.conds);
     st.include_depth = 0;
+    st.call_depth = 0;
     st.error = 0;
     st.error_msg[0] = '\0';
 
@@ -882,6 +1034,7 @@ minipp_result minipp_process_file(const char *filename) {
     sb_init(&st.output);
     cs_init(&st.conds);
     st.include_depth = 0;
+    st.call_depth = 0;
     st.error = 0;
     st.error_msg[0] = '\0';
 
