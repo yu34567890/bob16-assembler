@@ -1,16 +1,15 @@
 %define STACK_POINTER r0
 %define STACK_ADDR 0x8000
 
-%func push register
+%func push arg0
 	put str arg0 r0 0
 	add r0 1
 %endfunc
 
-%func pop dst    
-	add r0 -1
+%func pop arg0    
+	add r0 -1 ; this is mode 3
 	put ldr arg0 r0 0
 %endfunc
-
 
 %func sub arg0, arg1, arg2
 	put not arg2
@@ -18,6 +17,15 @@
 	put add arg0, arg1, arg2
 	put add arg2, -1
 	put not arg2
+%endfunc
+
+%func or arg0, arg1, arg2
+	put not arg1
+	put not arg2
+	put and arg0 arg1 arg2
+	put not arg0
+	put not arg1
+	put not arg2 
 %endfunc
 
 %func cmp arg0, arg1
@@ -32,6 +40,34 @@
 	put add arg1 ,arg0, arg1   
 %endfunc
 
+; important notice
+; function that uses this return type should always make sure the stack pointer is set to same place
+; be carefull when using this and make sure that you poped the entire stack back or restored the registers you used
+
+%func call arg0
+	put lea r7 4
+	%fncall push arg0
+	put li r7 arg0
+	ret
+%endfunc
+
+; never use r0 
+%func saveregister
+	%repeat
+		%fncall push arg
+	%endrepeat
+%endfunc
+
+%func loadregister
+	%repeat
+		%fncall pop arg
+	%endrepeat
+%endfunc
+
+%func return
+	%fncall pop r7
+	ret
+%endfunc
 
 %func .datafill 
 	%repeat

@@ -1,17 +1,11 @@
-and r0 r0 r0
 
+
+%define MAIN_ENTRY start
+%include "init.basm"
 %include "memory_map.basm"
 %include "stdlib.basm"
 
 %define gpu_pointer r3
-li r3 GPU_START
-
-input_loop:
-	lp r1 KEYBOARD_POLL
-	not r1   
-	br 0b101 1 ; skip jsr if r1 != 65535 aka event
-	jsr keydown
-	br 0b111 input_loop
 
 keydown:
 	sti r1 1
@@ -29,4 +23,14 @@ gpu_putchar:
 	str r4 r3 0
 	add r3 1
 	ret
+
+start:
+	li r3 GPU_START
+	
+input_loop:
+	lp r1 KEYBOARD_POLL
+	not r1   
+	br 0b101 1 ; skip jsr if r1 != 65535 aka event
+	jsr keydown
+	br 0b111 input_loop
 

@@ -1,8 +1,27 @@
+-- registers --
+r0 - stack pointer load the stack address at start
+r1-r6 - general purpose use it what ever you want 
+r7 - return register used for instruction ret
+
 -- strict rules --
 
 every program must start with 
-and r0 r0 r0
-otherwise li lp wrt will not work 
+
+%define MAIN_ENTRY main_label
+%include "init.basm"
+
+at the start not below any other library
+if MAIN_ENTRY is not defined init.basm will jump to label main 
+
+ex
+%define MAIN_ENTRY shit
+%include "init.basm"
+
+shit:
+	halt
+
+instructions should only be writen in lowercase uppercase is declined
+except WORD and ORG those are only writen in uppercase otherwise will be rejected 
 
 -- other instructions are nearly identical to the bob 16 docs --
 
@@ -20,11 +39,12 @@ BR: if condition codes match any of the nzp flags, pc += imm[9]
 	0b010 z
 	0b100 n 
 	nzp does not works in br only binary values 
+	can use labels
 
 LEA: dst = pc + imm
 	ex. LEA R7 10 
 		(sets register 7 to pc + 10)
-	
+	cant use labels
 
 JMPR: pc = r[src]
 	ex. jmpr r0
@@ -34,8 +54,8 @@ JSR: r7 = pc and pc = register / label / 11 bit imm
 	ex. 
 	LOOP:
 	jsr LOOP:
-
 	can be used for function calls too
+	or labels
 
 
 -- psudeo instructions --
@@ -47,30 +67,49 @@ LI: loads an imm to dst register
 	r1 now contains 0xffff
 	labels can be used too 
 	li r1 SOME_FUNC
-	r1 now contains adress of that label 
+	r1 now contains address of that label 
 
-LP: load an memory adress to dst register
+LP: load an memory address to dst register
 	ex.
 	lp r1 0xffff
-	r1 now contains value of memory adress 0xffff (does not support registers )
+	r1 now contains value of memory address 0xffff (does not support registers )
 	labels can be used here too
 
-WRT: write dst to memory adress at r1
+WRT: write dst to memory address at r1
 	ex. 
 	write r1 r2
 	memory[r2] = r1
 
 -- stdlib instructions --
+
 (these instructions are defined in the stdlib)
 
+(to use include this at the start of the program)
 %include "stdlib.basm"
 
 (important note stdlib uses r0 as stack pointer main.basm or any other program shall not use r0 ever same as r7 as r7 is return to caller)
-(stack starts at 0x8000 tho can be changed by changing the value of r0 you should put li r0 stack_adress so stdlib will use that adress )
+(stack starts at 0x8000 tho can be changed by changing the value of r0 you should put li r0 stack_address so stdlib will use that address )
 
-push r1 ; pushes r1 to memory adress at r0 and increments r0
+push r1 ; pushes r1 to memory address at r0 and increments r0
 
 pop r1 : decrements r0 and reads it to r1 
+
+call label, address
+	; pushes return address to stack and jmps to the label, address
+	; note it still uses the r7 but you can still write change it in a function
+
+return
+	; pop r7 from stack and jumps to r7
+	; carefull when using make sure the stack function used is cleared otherwise it will jump to a random address
+
+.datafill
+	; fills the address with the hex numbers given
+	; example
+
+ORG 0x8000 ; sets the current address where instructions will take effect
+.datafill 0xff 0xff 0xff 0xff
+the address starting from 0x8000 will be filled with 0xff
+
 
 cmp: compares given registers and sets the flags
 	ex. 
@@ -101,8 +140,6 @@ cmp: compares given registers and sets the flags
 	; this is wrong as this uses the broken r1 r2 values and br will not jmp to the label 
 
 
-
-
 -- macros --
 
 %include "filename"
@@ -121,8 +158,6 @@ if SOMETHING is not defined it will preprocess the code inside otherwise it will
 %endif 	
 
 if something is defined it will preprocess the code in it 
-
-
 
 %func testinstruction arg0
 	put arg0 
@@ -153,11 +188,12 @@ add r1 r2 r3
 
 func args 
 
-
 %func sub arg0, arg1, arg2
 	put not arg1
 	put add arg1 1 
 	put add arg0 arg1 arg2 
+	put add arg2, -1
+	put not arg2
 %endfunc 
 this is a simple sub instruction that uses 3 args 
 
@@ -169,18 +205,29 @@ will become
 not r2 
 add r2 1 
 add r1 r2 r3 
-
-args cannot have any other name than arg[argnumber]
-
-%func test source 
-%endfunc 
-
-this is not allowed 
+add r2 -1
+not arg2
 
 -- helper instructions -- 
-(these instructions must be writen with upercase)
+(these instructions must be writen with uppercase)
 ORG 0x8000 
-this sets current pc to 0x8000 any instruction from now on will be writen to adress 0x8000
+this sets current pc to 0x8000 any instruction from now on will be writen to address 0x8000
+
+ex
+
+ORG 0x8000
+WORD 0x01
+WORD 0x02
+WORD 0x03
+
+addresses
+0x8000
+0x8001
+0x8002
+now contains the values
+0x01
+0x02
+0x03
 
 WORD 0xffff 
-sets current adress value to 0xffff 
+sets current address value to 0xffff 

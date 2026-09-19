@@ -1,0 +1,11 @@
+and r0 r0 r0
+
+%ifndef MAIN_ENTRY
+	li r7 main
+	ret
+%endif
+
+%ifdef MAIN_ENTRY
+	li r7 MAIN_ENTRY
+	ret
+%endif
