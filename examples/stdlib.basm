@@ -28,6 +28,51 @@
 	put not arg2 
 %endfunc
 
+%func nand arg0, arg1, arg2
+	put and arg0 arg1 arg2
+	put not arg0
+%endfunc
+
+%func shl arg0, arg1
+	put add arg0 arg1 arg1
+%endfunc
+
+%func write_low arg0, arg1
+	%fncall push r7
+	%fncall push r1
+	%fncall push r2
+
+	put li r7 0x00ff
+	put and r1 arg0 r7
+	put ldr r2 arg1 0
+	put li r7 0xff00
+	put and r2 r2 r7
+	put add r1 r1 r2
+	put str r1 arg1 0
+
+	%fncall pop r2
+	%fncall pop r1
+	%fncall pop r7
+%endfunc
+
+%func write_high arg0, arg1
+	%fncall push r7
+	%fncall push r1
+	%fncall push r2
+
+	put li r7 0xff00
+	put and r1 arg0 r7
+	put ldr r2 arg1 0
+	put li r7 0x00ff
+	put and r2 r2 r7
+	put add r1 r1 r2
+	put str r1 arg1 0
+
+	%fncall pop r2
+	%fncall pop r1
+	%fncall pop r7
+%endfunc
+
 %func cmp arg0, arg1
 	put not arg1
 	put add arg1,1
@@ -40,15 +85,11 @@
 	put add arg1 ,arg0, arg1   
 %endfunc
 
-; important notice
-; function that uses this return type should always make sure the stack pointer is set to same place
-; be carefull when using this and make sure that you poped the entire stack back or restored the registers you used
-
 %func call arg0
-	put lea r7 4
-	%fncall push arg0
+	%fncall push r7
 	put li r7 arg0
-	ret
+	put jsr r7
+	%fncall pop r7
 %endfunc
 
 ; never use r0 

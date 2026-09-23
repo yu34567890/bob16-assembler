@@ -94,14 +94,6 @@ push r1 ; pushes r1 to memory address at r0 and increments r0
 
 pop r1 : decrements r0 and reads it to r1 
 
-call label, address
-	; pushes return address to stack and jmps to the label, address
-	; note it still uses the r7 but you can still write change it in a function
-
-return
-	; pop r7 from stack and jumps to r7
-	; carefull when using make sure the stack function used is cleared otherwise it will jump to a random address
-
 .datafill
 	; fills the address with the hex numbers given
 	; example
